@@ -1,0 +1,72 @@
+# ==============================================================================
+# Secrets, Credentials, and Personal Information
+# ==============================================================================
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.pub
+id_rsa*
+id_ed25519*
+*.secret
+*.secrets
+*.token
+*.pat
+.secrets/
+credentials.json
+.git-credentials
+.netrc
+
+# ==============================================================================
+# OS Generated Files
+# ==============================================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+
+# ==============================================================================
+# Editor, IDE, and AI Tool Local Files
+# ==============================================================================
+.vscode/
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.code-workspace
+.antigravity/
+.gemini/
+.claude/
+.cursor/
+
+# ==============================================================================
+# Temporary, Backup, Log, and Build Cache Files
+# ==============================================================================
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+*.swo
+*~
+*.log
+logs/
+bin/
+obj/
+
+# ==============================================================================
+# Prohibited / Unintended Toolchain Artifacts
+# ==============================================================================
+node_modules/
+__pycache__/
+.venv/
+venv/
