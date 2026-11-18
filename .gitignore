@@ -1,72 +1,57 @@
 # ==============================================================================
-# Secrets, Credentials, and Personal Information
+# Release Artifacts & Generated Outputs (Do NOT commit built packages/reports)
 # ==============================================================================
-.env
-.env.*
-*.pem
-*.key
-*.p12
-*.pfx
-*.pub
-id_rsa*
-id_ed25519*
-*.secret
-*.secrets
-*.token
-*.pat
-.secrets/
-credentials.json
-.git-credentials
-.netrc
+*.mcpack
+*.mcaddon
+*.mctemplate
+*.mcworld
 
 # ==============================================================================
-# OS Generated Files
+# .NET / C# Build Outputs & NuGet Caches (Contain local machine/user paths)
 # ==============================================================================
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.lnk
-.DS_Store
-._*
-.AppleDouble
-.LSOverride
-
-# ==============================================================================
-# Editor, IDE, and AI Tool Local Files
-# ==============================================================================
-.vscode/
-.vs/
-.idea/
-*.suo
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+artifacts/
 *.user
+*.rsuser
+*.suo
 *.userosscache
 *.sln.docstates
-*.code-workspace
-.antigravity/
-.gemini/
-.claude/
-.cursor/
+project.lock.json
+project.fragment.lock.json
+*.nupkg
+*.snupkg
 
 # ==============================================================================
-# Temporary, Backup, Log, and Build Cache Files
+# IDE / Editor / AI Assistant Local State
 # ==============================================================================
-*.tmp
-*.temp
-*.bak
-*.orig
+.vs/
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
-*.log
-logs/
-bin/
-obj/
+.gemini/
+.antigravity/
+.claude/
+.cursor/
+.aider*
 
 # ==============================================================================
-# Prohibited / Unintended Toolchain Artifacts
+# Secrets, Certificates, OS Metadata & Temporary Files
 # ==============================================================================
-node_modules/
-__pycache__/
-.venv/
-venv/
+.env
+.env.*
+*.pfx
+*.key
+*.pem
+*.cer
+[Tt]humbs.db
+ehthumbs.db
+[Dd]esktop.ini
+.DS_Store
+*.tmp
+*.bak
+*.orig
