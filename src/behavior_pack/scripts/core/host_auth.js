@@ -56,11 +56,78 @@ export function isHostPlayer(player) {
 }
 
 /**
+ * ホスト本人へ初回案内メッセージを一度だけ送信する。
+ * @param {import("@minecraft/server").Player} player
+ */
+function sendHostGuideOnce(player) {
+  if (!isHostPlayer(player) || getBooleanProp(HOST_GUIDED_KEY, false)) {
+    return;
+  }
+  setBooleanProp(HOST_GUIDED_KEY, true);
+  try {
+    player.sendMessage(
+      "§e[のやっきー専用] 設定画面を開くには /noyakki_only:config を実行してください（ホストのみ利用可能）。"
+    );
+  } catch {
+    // 送信失敗は無視
+  }
+}
+
+/**
+ * ワールド内の在室プレイヤーからホストIDを補完解決する。
+ */
+function resolveHostFromWorld() {
+  try {
+    const players = world.getAllPlayers();
+    for (const player of players) {
+      try {
+        if (player && player.isValid && player.commandPermissionLevel === CommandPermissionLevel.Host) {
+          tryRegisterHost(player);
+          sendHostGuideOnce(player);
+          return;
+        }
+      } catch {
+        // 次のプレイヤーを確認
+      }
+    }
+    if (getHostId() === "" && players.length > 0 && players[0] && players[0].isValid) {
+      tryRegisterHost(players[0]);
+      sendHostGuideOnce(players[0]);
+    }
+  } catch {
+    // ワールド未準備時は無視
+  }
+}
+
+/**
  * カスタムコマンド実行元がホスト本人であるかを検証し、非ホスト・非プレイヤーを即時遮断する。
  * @param {import("@minecraft/server").CustomCommandOrigin} origin
  */
 export function assertHostOnly(origin) {
   const entity = origin ? origin.sourceEntity : undefined;
+  if (entity && entity.isValid && entity.typeId === "minecraft:player" && getHostId() === "") {
+    let canBootstrapHost = false;
+    try {
+      if (entity.commandPermissionLevel === CommandPermissionLevel.Host) {
+        canBootstrapHost = true;
+      }
+    } catch {
+      // フォールバック判定へ進む
+    }
+    if (!canBootstrapHost) {
+      try {
+        if (world.getAllPlayers().length === 1) {
+          canBootstrapHost = true;
+        }
+      } catch {
+        // 無視
+      }
+    }
+    if (canBootstrapHost) {
+      tryRegisterHost(entity);
+    }
+  }
+
   if (!isHostPlayer(entity)) {
     return {
       ok: false,
@@ -81,7 +148,7 @@ export function assertHostOnly(origin) {
 }
 
 /**
- * ホスト識別と初回コマンド案内を初期化する。
+ * ホスト識別と初回コマンド案内を初期化する（Early-Execution 安全）。
  */
 export function initHostAuth() {
   world.afterEvents.playerSpawn.subscribe((event) => {
@@ -90,37 +157,15 @@ export function initHostAuth() {
     }
     const player = event.player;
     tryRegisterHost(player);
-
-    if (isHostPlayer(player) && !getBooleanProp(HOST_GUIDED_KEY, false)) {
-      setBooleanProp(HOST_GUIDED_KEY, true);
-      try {
-        player.sendMessage(
-          "§e[のやっきー専用] 設定画面を開くには /noyakki_only:config を実行してください（ホストのみ利用可能）。"
-        );
-      } catch {
-        // 送信失敗は無視
-      }
-    }
+    sendHostGuideOnce(player);
   });
 
-  // スクリプトリロード時など既にプレイヤーが在室している場合の補完
+  world.afterEvents.worldLoad.subscribe(() => {
+    resolveHostFromWorld();
+  });
+
+  // スクリプトリロード時など既にワールド・プレイヤーが存在する場合の補完
   system.run(() => {
-    if (getHostId() !== "") {
-      return;
-    }
-    const players = world.getAllPlayers();
-    for (const player of players) {
-      try {
-        if (player && player.isValid && player.commandPermissionLevel === CommandPermissionLevel.Host) {
-          tryRegisterHost(player);
-          return;
-        }
-      } catch {
-        // 次のプレイヤーを確認
-      }
-    }
-    if (players.length > 0) {
-      tryRegisterHost(players[0]);
-    }
+    resolveHostFromWorld();
   });
 }

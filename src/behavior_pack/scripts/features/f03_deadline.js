@@ -22,6 +22,7 @@ const CLEARED_KEY = makeKey("f03", "cleared");
 const TRIGGERED_KEY = makeKey("f03", "triggered");
 
 const DEFAULT_DAYS = 50;
+const MIN_DAYS = 3;
 const DEFAULT_MSG = "ゲームオーバー";
 
 function isEnabled() {
@@ -49,11 +50,46 @@ function isTriggered() {
 }
 
 /**
+ * 在室中のホストプレイヤー全員へメッセージを送信する。
+ * @param {string} message
+ */
+function notifyHostPlayers(message) {
+  for (const player of world.getAllPlayers()) {
+    if (!isHostPlayer(player)) {
+      continue;
+    }
+    try {
+      player.sendMessage(message);
+    } catch {
+      // 送信失敗は無視
+    }
+  }
+}
+
+/**
  * デッドラインの有効/無効を更新する。
+ * 未クリアかつ設定日数が最低日数未満または現在日数以下の場合は、即死防止のため有効化を拒否する。
  * @param {boolean} enabled
  */
 function setEnabled(enabled) {
-  setBooleanProp(ENABLED_KEY, Boolean(enabled));
+  const nextEnabled = Boolean(enabled);
+  if (nextEnabled && !isCleared()) {
+    const days = getDays();
+    const currentDay = getCurrentDay();
+    if (days < MIN_DAYS || days <= currentDay) {
+      setBooleanProp(ENABLED_KEY, false);
+      const minRecommended = Math.max(MIN_DAYS, currentDay + 1);
+      const reason =
+        days < MIN_DAYS
+          ? `制限日数（${days}日）が最低日数（${MIN_DAYS}日）未満`
+          : `制限日数（${days}日）が現在の経過日数（${currentDay}日）以下`;
+      notifyHostPlayers(
+        `§c[デッドライン] ${reason}のため有効化を中止しました。個別設定から ${minRecommended} 以上の日数を設定してください。`
+      );
+      return;
+    }
+  }
+  setBooleanProp(ENABLED_KEY, nextEnabled);
 }
 
 /**
@@ -82,12 +118,13 @@ async function openSettingsForm(player, onBack) {
   const form = new ModalFormData()
     .title("デッドライン 設定")
     .toggle("デッドラインを有効にする", { defaultValue: isEnabled() })
-    .textField("制限日数（ゲーム内経過日数）", "0以上の半角整数（例: 50）", {
+    .textField("制限日数（ゲーム内経過日数）", "3以上の半角整数（例: 50）", {
       defaultValue: String(getDays())
     })
     .textField("ゲームオーバーメッセージ", DEFAULT_MSG, {
       defaultValue: getMessage()
-    });
+    })
+    .submitButton("保存して戻る");
 
   const response = await showFormWithRetry(player, form);
   if (!response || response.canceled || !response.formValues) {
@@ -103,7 +140,7 @@ async function openSettingsForm(player, onBack) {
 
   if (!/^\d+$/.test(daysRaw)) {
     try {
-      player.sendMessage("§c[デッドライン] 制限日数は 0 以上の半角整数で入力してください。");
+      player.sendMessage("§c[デッドライン] 制限日数は 3 以上の半角整数で入力してください。");
     } catch {
       // 送信失敗は無視
     }
@@ -111,9 +148,9 @@ async function openSettingsForm(player, onBack) {
   }
 
   const parsedDays = Number(daysRaw);
-  if (!Number.isSafeInteger(parsedDays) || parsedDays < 0) {
+  if (!Number.isSafeInteger(parsedDays) || parsedDays < MIN_DAYS) {
     try {
-      player.sendMessage("§c[デッドライン] 制限日数の値が不正です。");
+      player.sendMessage("§c[デッドライン] 制限日数は 3 以上の半角整数で入力してください。");
     } catch {
       // 送信失敗は無視
     }
@@ -123,6 +160,18 @@ async function openSettingsForm(player, onBack) {
   if (msgRaw.length === 0) {
     try {
       player.sendMessage("§c[デッドライン] ゲームオーバーメッセージは空文字にできません。");
+    } catch {
+      // 送信失敗は無視
+    }
+    return;
+  }
+
+  const currentDay = getCurrentDay();
+  if (nextEnabled && !isCleared() && parsedDays <= currentDay) {
+    try {
+      player.sendMessage(
+        `§c[デッドライン] 現在の経過日数（${currentDay}日）以下を制限日数（${parsedDays}日）に設定して有効化することはできません（即座にゲームオーバーになります）。${currentDay + 1} 以上の日数を指定してください。`
+      );
     } catch {
       // 送信失敗は無視
     }
@@ -157,7 +206,7 @@ function getStatusSummary() {
   }
   const days = getDays();
   const currentDay = getCurrentDay();
-  return `・デッドライン: ON（${days}日終了まで / 残り ${days - currentDay}日）`;
+  return `・デッドライン: ON（${days}日到達で終了 / 残り ${Math.max(0, days - currentDay)}日）`;
 }
 
 /**
@@ -196,10 +245,14 @@ function init() {
       return;
     }
 
-    setBooleanProp(CLEARED_KEY, true);
-
     const currentDay = getCurrentDay();
     const days = getDays();
+    if (currentDay >= days) {
+      return;
+    }
+
+    setBooleanProp(CLEARED_KEY, true);
+
     const notice = `§a[デッドライン] 期限内（${currentDay}/${days}日）にエンダードラゴン討伐＆帰還を達成しました！`;
     for (const member of world.getAllPlayers()) {
       if (!member || !member.isValid) {
@@ -218,14 +271,14 @@ function init() {
     }
   });
 
-  // タイムアップ監視: 10 tick (0.5秒) 間隔で期限超過をチェック
+  // タイムアップ監視: 10 tick (0.5秒) 間隔で期限到達をチェック
   system.runInterval(() => {
     if (!isEnabled() || isCleared() || isTriggered() || isGameOverActive()) {
       return;
     }
     const currentDay = getCurrentDay();
     const days = getDays();
-    if (currentDay <= days) {
+    if (currentDay < days) {
       return;
     }
 

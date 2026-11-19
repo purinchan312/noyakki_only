@@ -17,7 +17,6 @@ import {
   GROUP_BY_ID,
   WORKSTATION_UI_BLOCKS,
   stripMinecraftNamespace,
-  isBlockActionItem,
   getGroupUnlockDay,
   classifyItemGroups,
   resolveRestrictingGroup
@@ -28,8 +27,17 @@ const DAYS_JSON_KEY = makeKey("f02", "days_json");
 const LAST_DAY_KEY = makeKey("f02", "last_day");
 
 const NOTIFY_COOLDOWN_TICKS = 20;
+const HOTBAR_SIZE = 9;
+const PROTECTED_SLOTS = [
+  EquipmentSlot.Head,
+  EquipmentSlot.Chest,
+  EquipmentSlot.Legs,
+  EquipmentSlot.Feet,
+  EquipmentSlot.Offhand
+];
+
 const lastNotifyTickByPlayer = new Map();
-const weaknessAppliedPlayers = new Set();
+const disarmingPlayers = new Set();
 
 function isEnabled() {
   return getBooleanProp(ENABLED_KEY, false);
@@ -41,6 +49,7 @@ function getDaysMap() {
 
 /**
  * 機能の有効/無効を切り替え、初回有効化時は現在日数を記録して遡及通知を抑止する。
+ * 有効化時は既に手に持っている未解放アイテムを即時解除する。
  * @param {boolean} enabled
  */
 function setEnabled(enabled) {
@@ -49,6 +58,11 @@ function setEnabled(enabled) {
   setBooleanProp(ENABLED_KEY, nextEnabled);
   if (!wasEnabled && nextEnabled && getNumberProp(LAST_DAY_KEY, -1) === -1) {
     setNumberProp(LAST_DAY_KEY, getCurrentDay());
+  }
+  if (nextEnabled) {
+    system.run(() => {
+      enforceAllPlayersEquipment();
+    });
   }
 }
 
@@ -116,6 +130,23 @@ function evaluateItemAccess(itemStackOrTypeId, currentDay, daysMap) {
 }
 
 /**
+ * プレイヤーが手に持っているアイテム（メインハンド優先、空ならオフハンド）を取得する。
+ * @param {import("@minecraft/server").Player} player
+ * @returns {import("@minecraft/server").ItemStack | undefined}
+ */
+function getHeldItemForPlacement(player) {
+  try {
+    const eq = player.getComponent("minecraft:equippable");
+    if (!eq) {
+      return undefined;
+    }
+    return eq.getEquipment(EquipmentSlot.Mainhand) ?? eq.getEquipment(EquipmentSlot.Offhand);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * クールダウン付きで制限通知（アクションバー＋効果音）を送信する。
  * @param {import("@minecraft/server").Player} player
  * @param {{ groupId?: string, groupName?: string, unlockDay: number }} denial
@@ -166,30 +197,365 @@ function scheduleBlockedNotification(player, denial, currentDay) {
 }
 
 /**
- * 装備解除したアイテムをプレイヤーのインベントリへ戻し、満杯なら足元へドロップする。
+ * 指定スロット範囲（startSlot〜endSlot、skipSlot除外）へアイテムを格納し、入り切らなかった分を返す。
+ * すべて格納できた場合は undefined を返す。
+ * @param {import("@minecraft/server").Container} container
+ * @param {import("@minecraft/server").ItemStack} itemStack
+ * @param {number} startSlot
+ * @param {number} endSlot
+ * @param {number} [skipSlot=-1]
+ * @returns {import("@minecraft/server").ItemStack | undefined}
+ */
+function storeItemInSlotRange(container, itemStack, startSlot, endSlot, skipSlot = -1) {
+  if (!container || !itemStack || itemStack.amount <= 0) {
+    return itemStack;
+  }
+  const maxSlot = Math.min(endSlot, container.size - 1);
+  if (startSlot > maxSlot) {
+    return itemStack.clone();
+  }
+
+  const remaining = itemStack.clone();
+
+  // 第1パス: 既存スタックへの合流を試みる
+  if (remaining.maxAmount > 1) {
+    for (let slot = startSlot; slot <= maxSlot; slot++) {
+      if (slot === skipSlot) {
+        continue;
+      }
+      let existing;
+      try {
+        existing = container.getItem(slot);
+      } catch {
+        existing = undefined;
+      }
+      if (!existing || existing.amount >= existing.maxAmount) {
+        continue;
+      }
+      let canStack = false;
+      try {
+        canStack = existing.isStackableWith(remaining);
+      } catch {
+        canStack = false;
+      }
+      if (!canStack) {
+        continue;
+      }
+
+      const moveAmount = Math.min(existing.maxAmount - existing.amount, remaining.amount);
+      if (moveAmount <= 0) {
+        continue;
+      }
+
+      const updatedExisting = existing.clone();
+      updatedExisting.amount = existing.amount + moveAmount;
+      try {
+        container.setItem(slot, updatedExisting);
+      } catch {
+        continue;
+      }
+
+      if (moveAmount >= remaining.amount) {
+        return undefined;
+      }
+      remaining.amount -= moveAmount;
+    }
+  }
+
+  // 第2パス: 空スロットへ格納する
+  for (let slot = startSlot; slot <= maxSlot; slot++) {
+    if (slot === skipSlot) {
+      continue;
+    }
+    let existing;
+    try {
+      existing = container.getItem(slot);
+    } catch {
+      continue;
+    }
+    if (existing) {
+      continue;
+    }
+    try {
+      container.setItem(slot, remaining);
+      return undefined;
+    } catch {
+      // 格納失敗時は別スロットを試す
+    }
+  }
+
+  return remaining;
+}
+
+/**
+ * 防具・オフハンドから外したアイテムをメインハンド以外の枠（バックパック優先）へ戻し、満杯時は足元へドロップする。
  * @param {import("@minecraft/server").Player} player
  * @param {import("@minecraft/server").ItemStack} itemStack
  */
-function returnItemToPlayer(player, itemStack) {
+function returnItemAvoidingMainhand(player, itemStack) {
+  if (!itemStack) {
+    return;
+  }
+
+  let remaining = itemStack.clone();
   try {
     const inventory = player.getComponent("minecraft:inventory");
     const container = inventory ? inventory.container : undefined;
-    if (container) {
-      const leftover = container.addItem(itemStack);
-      if (!leftover) {
+    if (container && container.size > 0) {
+      const selectedSlot =
+        typeof player.selectedSlotIndex === "number" ? player.selectedSlotIndex : 0;
+
+      if (container.size > HOTBAR_SIZE) {
+        remaining = storeItemInSlotRange(
+          container,
+          remaining,
+          HOTBAR_SIZE,
+          container.size - 1,
+          -1
+        );
+        if (!remaining) {
+          return;
+        }
+      }
+
+      const hotbarEnd = Math.min(HOTBAR_SIZE - 1, container.size - 1);
+      remaining = storeItemInSlotRange(container, remaining, 0, hotbarEnd, selectedSlot);
+      if (!remaining) {
         return;
       }
-      player.dimension.spawnItem(leftover, player.location);
-      return;
     }
   } catch {
     // インベントリ返却失敗時は足元スポーンへフォールバック
   }
 
+  if (remaining) {
+    try {
+      player.dimension.spawnItem(remaining, player.location);
+    } catch {
+      // スポーン失敗は無視
+    }
+  }
+}
+
+/**
+ * 選択中以外のホットバースロットから安全な枠（空または解放済みアイテム）を探す。
+ * @param {import("@minecraft/server").Container} container
+ * @param {number} selectedSlot
+ * @param {number} currentDay
+ * @param {Record<string, number>} daysMap
+ * @param {number | undefined} previousSlotHint
+ * @returns {number | undefined}
+ */
+function findSafeHotbarSlot(container, selectedSlot, currentDay, daysMap, previousSlotHint) {
+  const hotbarCount = Math.min(HOTBAR_SIZE, container.size);
+  if (hotbarCount <= 1) {
+    return undefined;
+  }
+
+  const isSafeSlot = (slot) => {
+    if (slot === selectedSlot || slot < 0 || slot >= hotbarCount) {
+      return false;
+    }
+    try {
+      const slotItem = container.getItem(slot);
+      return !slotItem || evaluateItemAccess(slotItem, currentDay, daysMap).allowed;
+    } catch {
+      return false;
+    }
+  };
+
+  const hasValidHint =
+    typeof previousSlotHint === "number" &&
+    Number.isInteger(previousSlotHint) &&
+    previousSlotHint >= 0 &&
+    previousSlotHint < hotbarCount &&
+    previousSlotHint !== selectedSlot;
+
+  const scrolledRight = hasValidHint && (previousSlotHint + 1) % hotbarCount === selectedSlot;
+  const scrolledLeft =
+    hasValidHint && (previousSlotHint + hotbarCount - 1) % hotbarCount === selectedSlot;
+
+  if (hasValidHint && !scrolledRight && !scrolledLeft && isSafeSlot(previousSlotHint)) {
+    return previousSlotHint;
+  }
+
+  const stepDir = scrolledLeft ? hotbarCount - 1 : 1;
+  for (let step = 1; step < hotbarCount; step++) {
+    const candidate = (selectedSlot + step * stepDir) % hotbarCount;
+    if (isSafeSlot(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 対象プレイヤーの防具・オフハンド・メインハンドを検査し、未解放アイテムを即座に解除する。
+ * @param {import("@minecraft/server").Player} player
+ * @param {number} currentDay
+ * @param {Record<string, number>} daysMap
+ * @param {number | undefined} [previousSlotHint]
+ */
+function enforcePlayerEquipment(player, currentDay, daysMap, previousSlotHint = undefined) {
+  if (!isEnabled() || !isPlayerRestricted(player)) {
+    return;
+  }
+  if (disarmingPlayers.has(player.id)) {
+    return;
+  }
+
+  disarmingPlayers.add(player.id);
   try {
-    player.dimension.spawnItem(itemStack, player.location);
-  } catch {
-    // スポーン失敗は無視
+    // 1. 防具4枠・オフハンドの強制解除
+    let equippable;
+    try {
+      equippable = player.getComponent("minecraft:equippable");
+    } catch {
+      equippable = undefined;
+    }
+    if (equippable) {
+      for (const slot of PROTECTED_SLOTS) {
+        let equipped;
+        try {
+          equipped = equippable.getEquipment(slot);
+        } catch {
+          equipped = undefined;
+        }
+        if (!equipped) {
+          continue;
+        }
+        const access = evaluateItemAccess(equipped, currentDay, daysMap);
+        if (access.allowed) {
+          continue;
+        }
+        const itemCopy = typeof equipped.clone === "function" ? equipped.clone() : equipped;
+        try {
+          equippable.setEquipment(slot, undefined);
+        } catch {
+          continue;
+        }
+        returnItemAvoidingMainhand(player, itemCopy);
+        notifyBlocked(player, access, currentDay);
+      }
+    }
+
+    // 2. メインハンド（選択中ホットバースロット）の強制解除
+    let container;
+    try {
+      const inventory = player.getComponent("minecraft:inventory");
+      container = inventory ? inventory.container : undefined;
+    } catch {
+      container = undefined;
+    }
+    if (!container || container.size <= 0) {
+      return;
+    }
+
+    let selectedSlot;
+    try {
+      selectedSlot = player.selectedSlotIndex;
+    } catch {
+      return;
+    }
+    if (typeof selectedSlot !== "number" || selectedSlot < 0 || selectedSlot >= container.size) {
+      return;
+    }
+
+    let mainItem;
+    try {
+      mainItem = container.getItem(selectedSlot);
+    } catch {
+      mainItem = undefined;
+    }
+    if (!mainItem) {
+      return;
+    }
+
+    const mainAccess = evaluateItemAccess(mainItem, currentDay, daysMap);
+    if (mainAccess.allowed) {
+      return;
+    }
+
+    const leftover =
+      container.size > HOTBAR_SIZE
+        ? storeItemInSlotRange(container, mainItem.clone(), HOTBAR_SIZE, container.size - 1, -1)
+        : mainItem.clone();
+
+    if (!leftover) {
+      try {
+        container.setItem(selectedSlot, undefined);
+        notifyBlocked(player, mainAccess, currentDay);
+      } catch {
+        // 既にバックパックへ退避済みのため、クリア失敗時はカーソル退避のみ試みて重複ドロップを防ぐ
+        const fallbackSlot = findSafeHotbarSlot(
+          container,
+          selectedSlot,
+          currentDay,
+          daysMap,
+          previousSlotHint
+        );
+        if (fallbackSlot !== undefined) {
+          try {
+            player.selectedSlotIndex = fallbackSlot;
+            notifyBlocked(player, mainAccess, currentDay);
+          } catch {
+            // 無視
+          }
+        }
+      }
+      return;
+    }
+
+    const remainingItem = leftover;
+    if (leftover.amount < mainItem.amount) {
+      try {
+        container.setItem(selectedSlot, leftover);
+      } catch {
+        // 部分更新失敗時は次の回避処理へ進む
+      }
+    }
+
+    const safeSlot = findSafeHotbarSlot(
+      container,
+      selectedSlot,
+      currentDay,
+      daysMap,
+      previousSlotHint
+    );
+    if (safeSlot !== undefined) {
+      try {
+        player.selectedSlotIndex = safeSlot;
+        notifyBlocked(player, mainAccess, currentDay);
+        return;
+      } catch {
+        // スロット切替失敗時は足元ドロップへ進む
+      }
+    }
+
+    try {
+      container.setItem(selectedSlot, undefined);
+      player.dimension.spawnItem(remainingItem, player.location);
+      notifyBlocked(player, mainAccess, currentDay);
+    } catch {
+      // ドロップ失敗は無視
+    }
+  } finally {
+    disarmingPlayers.delete(player.id);
+  }
+}
+
+/**
+ * 全在室プレイヤーの手持ち・装備を一括検査し、未解放アイテムを解除する。
+ */
+function enforceAllPlayersEquipment() {
+  if (!isEnabled()) {
+    return;
+  }
+  const currentDay = getCurrentDay();
+  const daysMap = getDaysMap();
+  for (const player of world.getAllPlayers()) {
+    enforcePlayerEquipment(player, currentDay, daysMap);
   }
 }
 
@@ -217,6 +583,7 @@ async function openSettingsForm(player, onBack) {
       { defaultValue: String(currentVal) }
     );
   }
+  form.submitButton("保存して戻る");
 
   const response = await showFormWithRetry(player, form);
   if (!response || response.canceled || !response.formValues) {
@@ -318,7 +685,23 @@ function getStatusSummary() {
 }
 
 /**
- * 日替わり解放通知・アクション制限・近接無力化・装備強制解除・ポータル除去を初期化する。
+ * イベントシグナルを安全に購読する（環境非対応や単一購読失敗で他処理を止めない）。
+ * @param {{ subscribe?: (cb: (ev: any) => void) => void } | undefined} signal
+ * @param {(ev: any) => void} callback
+ */
+function subscribeSafely(signal, callback) {
+  if (!signal || typeof signal.subscribe !== "function") {
+    return;
+  }
+  try {
+    signal.subscribe(callback);
+  } catch (err) {
+    console.error("[noyakki_only][f02] subscribe failed:", err);
+  }
+}
+
+/**
+ * 日替わり解放通知・アクション制限・手持ち/装備強制解除・ポータル除去を初期化する。
  */
 function init() {
   // 1. 日替わり解放チェック (20 tick 間隔)
@@ -368,7 +751,7 @@ function init() {
   }, 20);
 
   // 2. アイテム使用制限
-  world.beforeEvents.itemUse.subscribe((event) => {
+  subscribeSafely(world.beforeEvents.itemUse, (event) => {
     if (!isEnabled()) {
       return;
     }
@@ -384,39 +767,8 @@ function init() {
     }
   });
 
-  // 3. ブロック設置制限
-  world.beforeEvents.playerPlaceBlock.subscribe((event) => {
-    if (!isEnabled()) {
-      return;
-    }
-    const player = event.player;
-    if (!isPlayerRestricted(player)) {
-      return;
-    }
-
-    const currentDay = getCurrentDay();
-    const daysMap = getDaysMap();
-    const blockTypeId = event.permutationToPlace?.type?.id;
-    let targetItemOrId = blockTypeId;
-
-    if (!targetItemOrId) {
-      try {
-        const eq = player.getComponent("minecraft:equippable");
-        targetItemOrId = eq ? eq.getEquipment(EquipmentSlot.Mainhand) : undefined;
-      } catch {
-        targetItemOrId = undefined;
-      }
-    }
-
-    const access = evaluateItemAccess(targetItemOrId, currentDay, daysMap);
-    if (!access.allowed) {
-      event.cancel = true;
-      scheduleBlockedNotification(player, access, currentDay);
-    }
-  });
-
-  // 4. ブロックインタラクト制限（設備UIは透過・ベッド/ポータル/作用アイテムのみ遮断）
-  world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  // 3. ブロックインタラクト・設置制限（設備UIは透過・ベッド/ポータル/未解放アイテム使用と設置を遮断）
+  subscribeSafely(world.beforeEvents.playerInteractWithBlock, (event) => {
     if (!isEnabled()) {
       return;
     }
@@ -432,14 +784,15 @@ function init() {
     const currentDay = getCurrentDay();
     const daysMap = getDaysMap();
 
+    let isSneaking = false;
+    try {
+      isSneaking = Boolean(player.isSneaking);
+    } catch {
+      isSneaking = false;
+    }
+
     // ベッド就寝・リスポーン設定の制限
     if (shortBlockId === "bed" || shortBlockId.endsWith("_bed")) {
-      let isSneaking = false;
-      try {
-        isSneaking = Boolean(player.isSneaking);
-      } catch {
-        isSneaking = false;
-      }
       if (!isSneaking || !itemStack) {
         const bedAccess = evaluateGroupAccess("stone_bed", currentDay, daysMap);
         if (!bedAccess.allowed) {
@@ -474,19 +827,14 @@ function init() {
     }
 
     // 作業台・かまど・チェスト等の設備UIを開くだけの操作は許可する
-    let isSneaking = false;
-    try {
-      isSneaking = Boolean(player.isSneaking);
-    } catch {
-      isSneaking = false;
-    }
     if (!isSneaking && WORKSTATION_UI_BLOCKS.has(blockId)) {
       return;
     }
 
-    // ブロックへ直接作用するアイテムの制限
-    if (itemStack && isBlockActionItem(itemId)) {
-      const access = evaluateItemAccess(itemStack, currentDay, daysMap);
+    // 手持ちアイテム（メインハンドまたはオフハンド）が未解放ならブロック設置・作用を遮断する
+    const heldItem = itemStack ?? getHeldItemForPlacement(player);
+    if (heldItem) {
+      const access = evaluateItemAccess(heldItem, currentDay, daysMap);
       if (!access.allowed) {
         event.cancel = true;
         scheduleBlockedNotification(player, access, currentDay);
@@ -494,8 +842,8 @@ function init() {
     }
   });
 
-  // 5. 採掘・ブロック破壊制限（素手は常時許可）
-  world.beforeEvents.playerBreakBlock.subscribe((event) => {
+  // 4. 採掘・ブロック破壊制限（素手は常時許可・同一ティック先行対策の二重ガード）
+  subscribeSafely(world.beforeEvents.playerBreakBlock, (event) => {
     if (!isEnabled()) {
       return;
     }
@@ -515,134 +863,32 @@ function init() {
     }
   });
 
-  // 6. 近接攻撃の無力化（5 tick 間隔: メインハンドに未解放アイテム所持中のみ weakness 255 付与）
-  system.runInterval(() => {
+  // 5. 手持ち（メインハンド）・オフハンド・防具装備の即時強制解除（イベント駆動）
+  subscribeSafely(world.afterEvents.playerHotbarSelectedSlotChange, (event) => {
     if (!isEnabled()) {
-      if (weaknessAppliedPlayers.size > 0) {
-        for (const player of world.getAllPlayers()) {
-          if (player && player.isValid && weaknessAppliedPlayers.has(player.id)) {
-            try {
-              player.removeEffect("weakness");
-            } catch {
-              // エフェクト除去失敗は無視
-            }
-          }
-        }
-        weaknessAppliedPlayers.clear();
-      }
       return;
     }
+    enforcePlayerEquipment(
+      event.player,
+      getCurrentDay(),
+      getDaysMap(),
+      event.previousSlotSelected
+    );
+  });
 
-    const currentDay = getCurrentDay();
-    const daysMap = getDaysMap();
-
-    for (const player of world.getAllPlayers()) {
-      if (!player || !player.isValid) {
-        continue;
-      }
-
-      if (!isPlayerRestricted(player)) {
-        if (weaknessAppliedPlayers.has(player.id)) {
-          try {
-            player.removeEffect("weakness");
-          } catch {
-            // 無視
-          }
-          weaknessAppliedPlayers.delete(player.id);
-        }
-        continue;
-      }
-
-      let mainhandItem;
-      try {
-        const eq = player.getComponent("minecraft:equippable");
-        mainhandItem = eq ? eq.getEquipment(EquipmentSlot.Mainhand) : undefined;
-      } catch {
-        mainhandItem = undefined;
-      }
-
-      const shouldWeaken =
-        Boolean(mainhandItem) && !evaluateItemAccess(mainhandItem, currentDay, daysMap).allowed;
-
-      if (shouldWeaken) {
-        try {
-          player.addEffect("weakness", 30, { amplifier: 255, showParticles: false });
-          weaknessAppliedPlayers.add(player.id);
-        } catch {
-          // エフェクト付与失敗は無視
-        }
-      } else if (weaknessAppliedPlayers.has(player.id)) {
-        try {
-          player.removeEffect("weakness");
-        } catch {
-          // エフェクト除去失敗は無視
-        }
-        weaknessAppliedPlayers.delete(player.id);
-      }
+  subscribeSafely(world.afterEvents.playerInventoryItemChange, (event) => {
+    if (!isEnabled()) {
+      return;
     }
+    enforcePlayerEquipment(event.player, getCurrentDay(), getDaysMap());
+  });
+
+  // 6. 手持ち・オフハンド・防具装備の強制解除（5 tick 間隔の定期補完）
+  system.runInterval(() => {
+    enforceAllPlayersEquipment();
   }, 5);
 
-  // 7. 防具・オフハンド装備の強制解除（10 tick 間隔）
-  const protectedSlots = [
-    EquipmentSlot.Head,
-    EquipmentSlot.Chest,
-    EquipmentSlot.Legs,
-    EquipmentSlot.Feet,
-    EquipmentSlot.Offhand
-  ];
-
-  system.runInterval(() => {
-    if (!isEnabled()) {
-      return;
-    }
-
-    const currentDay = getCurrentDay();
-    const daysMap = getDaysMap();
-
-    for (const player of world.getAllPlayers()) {
-      if (!isPlayerRestricted(player)) {
-        continue;
-      }
-
-      let equippable;
-      try {
-        equippable = player.getComponent("minecraft:equippable");
-      } catch {
-        equippable = undefined;
-      }
-      if (!equippable) {
-        continue;
-      }
-
-      for (const slot of protectedSlots) {
-        let equipped;
-        try {
-          equipped = equippable.getEquipment(slot);
-        } catch {
-          equipped = undefined;
-        }
-        if (!equipped) {
-          continue;
-        }
-
-        const access = evaluateItemAccess(equipped, currentDay, daysMap);
-        if (access.allowed) {
-          continue;
-        }
-
-        const itemCopy = typeof equipped.clone === "function" ? equipped.clone() : equipped;
-        try {
-          equippable.setEquipment(slot, undefined);
-        } catch {
-          continue;
-        }
-        returnItemToPlayer(player, itemCopy);
-        notifyBlocked(player, access, currentDay);
-      }
-    }
-  }, 10);
-
-  // 8. 溶岩延焼等によるネザーポータル生成・進入の阻止（15 tick 間隔）
+  // 7. 溶岩延焼等によるネザーポータル生成・進入の阻止（15 tick 間隔）
   system.runInterval(() => {
     if (!isEnabled()) {
       return;

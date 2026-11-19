@@ -32,7 +32,12 @@ export async function showFormWithRetry(player, form, maxRetries = 20, retryDela
     if (!isHostPlayer(player)) {
       return undefined;
     }
-    const response = await form.show(player);
+    let response;
+    try {
+      response = await form.show(player);
+    } catch {
+      return undefined;
+    }
     if (
       response.canceled &&
       response.cancelationReason === FormCancelationReason.UserBusy &&
@@ -56,6 +61,15 @@ export async function openBulkToggleForm(player) {
   }
 
   const features = getFeatures();
+  if (features.length === 0) {
+    try {
+      player.sendMessage("§c[のやっきー専用] 設定可能な機能モジュールが登録されていません。");
+    } catch {
+      // 送信失敗は無視
+    }
+    return;
+  }
+
   const form = new ModalFormData().title("一括 ON/OFF 切替");
 
   for (const feature of features) {
@@ -63,6 +77,7 @@ export async function openBulkToggleForm(player) {
       defaultValue: feature.isEnabled()
     });
   }
+  form.submitButton("保存して戻る");
 
   const response = await showFormWithRetry(player, form);
   if (!response || response.canceled || !response.formValues) {
@@ -76,9 +91,12 @@ export async function openBulkToggleForm(player) {
   for (let i = 0; i < features.length; i++) {
     const feature = features[i];
     const nextEnabled = Boolean(response.formValues[i]);
-    if (nextEnabled !== feature.isEnabled()) {
+    const beforeEnabled = feature.isEnabled();
+    if (nextEnabled !== beforeEnabled) {
       feature.setEnabled(nextEnabled);
-      changed = true;
+      if (feature.isEnabled() !== beforeEnabled) {
+        changed = true;
+      }
     }
   }
 
@@ -157,7 +175,7 @@ export function registerConfigCommand() {
         }
         const hostPlayer = guard.player;
         system.run(() => {
-          openRootMenu(hostPlayer);
+          void openRootMenu(hostPlayer);
         });
         return guard.result;
       }

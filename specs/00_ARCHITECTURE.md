@@ -206,6 +206,7 @@ Antigravity は以下のいずれの作業を行う際にも、**作業着手前
 * **新規マークダウン（`04_*.md` 等）追加時**: $+0.1.0$ — `minor` を $+1$ し、`patch` を $0$ にリセットする（例: `[1, 0, 0]` から `[1, 1, 0]` へ更新）。
 * **既存マークダウンの修正・バグ修正・機能削除のみの場合**: $+0.0.1$ — `patch` を $+1$ する（例: `[1, 1, 0]` から `[1, 1, 1]` へ更新）。
 * **UUID固定の原則**: `header.uuid` および各 `modules[].uuid` は初回生成後に固定し、以降のバージョンアップ時に絶対に変更してはならない（ワールド上で別パック扱いになり重複適用や DynamicProperty 消失が起きるのを防ぐため）。
+* **登録画面でのバージョン表記（必須）**: マイクラ統合版のビヘイビアーパック一覧・登録画面でバージョンを即座に判別できるよう、`src/behavior_pack/texts/ja_JP.lang` の `pack.name` を `のやっきー専用 v{major}.{minor}.{patch}`、`src/behavior_pack/texts/en_US.lang` の `pack.name` を `Noyakki Only v{major}.{minor}.{patch}` とし、`manifest.json` のバージョン更新時に必ず同期する。
 
 ### 6.3 完了前チェックゲートとオフラインビルド (`tools/build.ps1`)
 すべての変更（新規作成・機能追加・機能修正・機能削除）の完了時、必ず以下の検証とビルドをオフラインで実行する。
@@ -213,6 +214,6 @@ Antigravity は以下のいずれの作業を行う際にも、**作業着手前
 1. **禁止ファイル・依存混入チェック**:
    * リポジトリ内に `package.json`, `node_modules/`, `*.ts`, `*.py`, 外部NuGet参照、ネットワーク通信コード、`-beta` API 参照が1つも存在しないことを `tools/build.ps1` で自動検査する。
 2. **構文・整合性チェック**:
-   * すべての `.json` ファイルに構文エラーがないこと、`texts/ja_JP.lang` が UTF-8（BOMなし）であること、`manifest.json` のバージョンと出力ファイル名が一致していることを検証する。
+   * すべての `.json` ファイルに構文エラーがないこと、`texts/ja_JP.lang` が UTF-8（BOMなし）であること、`manifest.json` のバージョンと `texts/ja_JP.lang`・`texts/en_US.lang` の `pack.name` 末尾バージョン表記ならびに出力ファイル名が一致していることを検証する。
 3. **パッケージング出力**:
    * PowerShell の標準圧縮機能または .NET 10 標準の `System.IO.Compression` のみを用いて、`dist/noyakki_only_v{major}.{minor}.{patch}.mcpack`（将来 `src/resource_pack/` が追加された場合は `.mcaddon`）を生成する。

@@ -1,4 +1,4 @@
-# Offline validation and .mcpack/.mcaddon packaging script using only PowerShell and .NET standard classes.
+﻿# Offline validation and .mcpack/.mcaddon packaging script using only PowerShell and .NET standard classes.
 $ErrorActionPreference = "Stop"
 
 Add-Type -AssemblyName System.IO.Compression
@@ -389,6 +389,22 @@ if (-not (Test-Path $manifestPath)) {
         Add-Failure "manifest.json header.version must be a [major, minor, patch] array."
     } else {
         $versionString = "$($hdrVer[0]).$($hdrVer[1]).$($hdrVer[2])"
+        $jaLangPath = Join-Path $bpDir "texts\ja_JP.lang"
+        if (Test-Path $jaLangPath) {
+            $jaLangContent = [System.IO.File]::ReadAllText($jaLangPath, $utf8Strict)
+            $expectedJaName = "pack.name=のやっきー専用 v$versionString"
+            if ($jaLangContent -notmatch ("(?m)^" + [regex]::Escape($expectedJaName) + "\r?$")) {
+                Add-Failure "ja_JP.lang pack.name must be '$expectedJaName' to match manifest.json version."
+            }
+        }
+        $enLangPath = Join-Path $bpDir "texts\en_US.lang"
+        if (Test-Path $enLangPath) {
+            $enLangContent = [System.IO.File]::ReadAllText($enLangPath, $utf8Strict)
+            $expectedEnName = "pack.name=Noyakki Only v$versionString"
+            if ($enLangContent -notmatch ("(?m)^" + [regex]::Escape($expectedEnName) + "\r?$")) {
+                Add-Failure "en_US.lang pack.name must be '$expectedEnName' to match manifest.json version."
+            }
+        }
     }
 
     $uuidRegex = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'

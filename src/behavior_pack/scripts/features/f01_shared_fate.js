@@ -89,7 +89,8 @@ async function openSettingsForm(player, onBack) {
     })
     .textField("ゲームオーバーメッセージ", DEFAULT_MSG, {
       defaultValue: getMessage()
-    });
+    })
+    .submitButton("保存して戻る");
 
   const response = await showFormWithRetry(player, form);
   if (!response || response.canceled || !response.formValues) {
@@ -217,7 +218,7 @@ function init() {
     }
 
     setBooleanProp(TRIGGERED_KEY, true);
-    const playerName = deadEntity.name ?? "プレイヤー";
+    const playerName = deadEntity.name || deadEntity.nameTag || "プレイヤー";
     const formattedMessage = formatGameOverMessage(getMessage(), days, currentDay, playerName);
     triggerGlobalGameOver("f01", formattedMessage);
   });

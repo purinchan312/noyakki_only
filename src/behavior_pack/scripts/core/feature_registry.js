@@ -1,4 +1,4 @@
-const features = [];
+const registeredFeatures = [];
 
 /**
  * 機能モジュールをレジストリに登録する。
@@ -8,10 +8,10 @@ export function registerFeature(feature) {
   if (!feature || typeof feature.id !== "string") {
     return;
   }
-  if (features.some((existing) => existing.id === feature.id)) {
+  if (registeredFeatures.some((existing) => existing.id === feature.id)) {
     return;
   }
-  features.push(feature);
+  registeredFeatures.push(feature);
 }
 
 /**
@@ -19,7 +19,7 @@ export function registerFeature(feature) {
  * @returns {Array<object>}
  */
 export function getFeatures() {
-  return [...features];
+  return [...registeredFeatures];
 }
 
 /**
@@ -28,16 +28,20 @@ export function getFeatures() {
  * @returns {object | undefined}
  */
 export function getFeatureById(id) {
-  return features.find((feature) => feature.id === id);
+  return registeredFeatures.find((feature) => feature.id === id);
 }
 
 /**
  * 登録済みの全機能モジュールの init() を順次実行する。
  */
 export function initAllFeatures() {
-  for (const feature of features) {
+  for (const feature of registeredFeatures) {
     if (typeof feature.init === "function") {
-      feature.init();
+      try {
+        feature.init();
+      } catch (err) {
+        console.error("[noyakki_only] Failed to init feature:", feature.id, err);
+      }
     }
   }
 }

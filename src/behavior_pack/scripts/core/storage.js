@@ -19,8 +19,12 @@ export function makeKey(scope, key) {
  * @returns {boolean}
  */
 export function getBooleanProp(fullKey, defaultValue) {
-  const value = world.getDynamicProperty(fullKey);
-  return typeof value === "boolean" ? value : defaultValue;
+  try {
+    const value = world.getDynamicProperty(fullKey);
+    return typeof value === "boolean" ? value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
 }
 
 /**
@@ -29,7 +33,11 @@ export function getBooleanProp(fullKey, defaultValue) {
  * @param {boolean} value
  */
 export function setBooleanProp(fullKey, value) {
-  world.setDynamicProperty(fullKey, Boolean(value));
+  try {
+    world.setDynamicProperty(fullKey, Boolean(value));
+  } catch {
+    // ワールド未準備等の例外は無視
+  }
 }
 
 /**
@@ -39,8 +47,12 @@ export function setBooleanProp(fullKey, value) {
  * @returns {number}
  */
 export function getNumberProp(fullKey, defaultValue) {
-  const value = world.getDynamicProperty(fullKey);
-  return typeof value === "number" && Number.isFinite(value) ? value : defaultValue;
+  try {
+    const value = world.getDynamicProperty(fullKey);
+    return typeof value === "number" && Number.isFinite(value) ? value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
 }
 
 /**
@@ -49,7 +61,11 @@ export function getNumberProp(fullKey, defaultValue) {
  * @param {number} value
  */
 export function setNumberProp(fullKey, value) {
-  world.setDynamicProperty(fullKey, Number(value));
+  try {
+    world.setDynamicProperty(fullKey, Number(value));
+  } catch {
+    // ワールド未準備等の例外は無視
+  }
 }
 
 /**
@@ -59,8 +75,12 @@ export function setNumberProp(fullKey, value) {
  * @returns {string}
  */
 export function getStringProp(fullKey, defaultValue) {
-  const value = world.getDynamicProperty(fullKey);
-  return typeof value === "string" ? value : defaultValue;
+  try {
+    const value = world.getDynamicProperty(fullKey);
+    return typeof value === "string" ? value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
 }
 
 /**
@@ -69,7 +89,11 @@ export function getStringProp(fullKey, defaultValue) {
  * @param {string} value
  */
 export function setStringProp(fullKey, value) {
-  world.setDynamicProperty(fullKey, String(value));
+  try {
+    world.setDynamicProperty(fullKey, String(value));
+  } catch {
+    // ワールド未準備等の例外は無視
+  }
 }
 
 /**
@@ -79,17 +103,17 @@ export function setStringProp(fullKey, value) {
  * @returns {Record<string, unknown>}
  */
 export function getJsonProp(fullKey, defaultValue) {
-  const raw = world.getDynamicProperty(fullKey);
-  if (typeof raw !== "string" || raw.length === 0) {
-    return { ...defaultValue };
-  }
   try {
+    const raw = world.getDynamicProperty(fullKey);
+    if (typeof raw !== "string" || raw.length === 0) {
+      return { ...defaultValue };
+    }
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
       return parsed;
     }
   } catch {
-    // 破損データ時は既定値へフォールバックする
+    // ワールド未準備または破損データ時は既定値へフォールバックする
   }
   return { ...defaultValue };
 }
@@ -100,7 +124,11 @@ export function getJsonProp(fullKey, defaultValue) {
  * @param {Record<string, unknown>} value
  */
 export function setJsonProp(fullKey, value) {
-  world.setDynamicProperty(fullKey, JSON.stringify(value));
+  try {
+    world.setDynamicProperty(fullKey, JSON.stringify(value));
+  } catch {
+    // ワールド未準備等の例外は無視
+  }
 }
 
 /**
@@ -108,5 +136,9 @@ export function setJsonProp(fullKey, value) {
  * @returns {number}
  */
 export function getCurrentDay() {
-  return world.getDay();
+  try {
+    return world.getDay();
+  } catch {
+    return 0;
+  }
 }

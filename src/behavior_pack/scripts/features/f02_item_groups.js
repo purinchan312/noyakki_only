@@ -253,9 +253,13 @@ const COAL_IDS = new Set([
   "charcoal",
   "coal_block",
   "torch",
+  "wall_torch",
   "soul_torch",
+  "soul_wall_torch",
   "campfire",
-  "soul_campfire"
+  "soul_campfire",
+  "colored_torch_rg",
+  "colored_torch_bp"
 ]);
 
 const STONE_BED_IDS = new Set([
@@ -411,9 +415,22 @@ const COPPER_IDS = new Set([
   "raw_copper",
   "raw_copper_block",
   "copper_ingot",
+  "copper_nugget",
   "lightning_rod",
   "spyglass",
-  "brush"
+  "brush",
+  "copper_sword",
+  "copper_axe",
+  "copper_pickaxe",
+  "copper_shovel",
+  "copper_hoe",
+  "copper_helmet",
+  "copper_chestplate",
+  "copper_leggings",
+  "copper_boots",
+  "copper_horse_armor",
+  "copper_torch",
+  "copper_wall_torch"
 ]);
 
 const COPPER_OXIDATION_STAGES = ["", "exposed_", "weathered_", "oxidized_"];
@@ -434,6 +451,10 @@ for (const wax of COPPER_WAX_STAGES) {
     COPPER_IDS.add(`${wax}${ox}copper_door`);
     COPPER_IDS.add(`${wax}${ox}copper_trapdoor`);
     COPPER_IDS.add(`${wax}${ox}lightning_rod`);
+    COPPER_IDS.add(`${wax}${ox}copper_bars`);
+    COPPER_IDS.add(`${wax}${ox}copper_chain`);
+    COPPER_IDS.add(`${wax}${ox}copper_lantern`);
+    COPPER_IDS.add(`${wax}${ox}copper_chest`);
   }
 }
 
@@ -482,6 +503,13 @@ const IRON_IDS = new Set([
   "pufferfish_bucket",
   "axolotl_bucket",
   "tadpole_bucket",
+  "water",
+  "flowing_water",
+  "lava",
+  "flowing_lava",
+  "powder_snow",
+  "fire",
+  "soul_fire",
   "anvil",
   "chipped_anvil",
   "damaged_anvil",
@@ -603,6 +631,12 @@ export const WORKSTATION_UI_BLOCKS = new Set([
   "minecraft:lectern"
 ]);
 
+for (const wax of COPPER_WAX_STAGES) {
+  for (const ox of COPPER_OXIDATION_STAGES) {
+    WORKSTATION_UI_BLOCKS.add(`minecraft:${wax}${ox}copper_chest`);
+  }
+}
+
 for (const color of DYE_COLORS) {
   WORKSTATION_UI_BLOCKS.add(`minecraft:${color}_shulker_box`);
 }
@@ -693,6 +727,48 @@ export function getGroupUnlockDay(groupId, daysMap) {
 }
 
 /**
+ * 通常ポーションが「水入りビン」か「その他ポーション」かを判別する。
+ * @param {import("@minecraft/server").ItemStack | undefined} itemStack
+ * @returns {"glass" | "potion"}
+ */
+function classifyPotionItem(itemStack) {
+  if (!itemStack) {
+    return "potion";
+  }
+
+  // 1. localizationKey 判定（水入りビンは "potion.emptyPotion.name"、奇妙/ありふれた/濃厚等は別キー）
+  try {
+    const locKey = itemStack.localizationKey;
+    if (locKey === "potion.emptyPotion.name") {
+      return "glass";
+    }
+    if (typeof locKey === "string" && locKey.length > 0 && locKey !== "item.potion.name") {
+      return "potion";
+    }
+  } catch {
+    // 次のフォールバック判定へ進む
+  }
+
+  // 2. ItemPotionComponent によるフォールバック判定
+  try {
+    const potionComp = itemStack.getComponent("minecraft:potion");
+    const shortEffectId = stripMinecraftNamespace(String(potionComp?.potionEffectType?.id ?? ""));
+    if (
+      shortEffectId === "" ||
+      shortEffectId === "water" ||
+      shortEffectId === "empty" ||
+      shortEffectId === "none"
+    ) {
+      return "glass";
+    }
+  } catch {
+    // コンポーネント未取得時は上位制限側（potion）へフォールバック
+  }
+
+  return "potion";
+}
+
+/**
  * アイテムまたはタイプIDが属するグループID一覧を返す。
  * 未分類の場合は空配列を返す。
  * @param {import("@minecraft/server").ItemStack | string | undefined} itemStackOrTypeId
@@ -714,18 +790,7 @@ export function classifyItemGroups(itemStackOrTypeId) {
 
   // ポーション類: 水入りビンのみ glass、それ以外のポーションは potion
   if (shortId === "potion") {
-    if (itemStack) {
-      try {
-        const potionComp = itemStack.getComponent("minecraft:potion");
-        const effectId = String(potionComp?.potionEffectType?.id ?? "").toLowerCase();
-        if (effectId === "water" || effectId === "minecraft:water") {
-          return ["glass"];
-        }
-      } catch {
-        // コンポーネント取得不可時は上位制限側（potion）へフォールバック
-      }
-    }
-    return ["potion"];
+    return [classifyPotionItem(itemStack)];
   }
 
   const matched = [];

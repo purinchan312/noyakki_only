@@ -72,6 +72,15 @@ function forceKillPlayer(player) {
 }
 
 /**
+ * ワールドの永続化ロックをインメモリロックへ同期する。
+ */
+function syncLockFromWorld() {
+  if (getBooleanProp(GAMEOVER_ACTIVE_KEY, false)) {
+    inMemoryLock = true;
+  }
+}
+
+/**
  * ワールドがすでにゲームオーバー確定状態であるかを返す。
  * @returns {boolean}
  */
@@ -136,12 +145,16 @@ export function triggerGlobalGameOver(sourceId, message) {
 }
 
 /**
- * オフライン参加者の再接続時即死対策を初期化する。
+ * オフライン参加者の再接続時即死対策を初期化する（Early-Execution 安全）。
  */
 export function initGameOverService() {
-  if (getBooleanProp(GAMEOVER_ACTIVE_KEY, false)) {
-    inMemoryLock = true;
-  }
+  world.afterEvents.worldLoad.subscribe(() => {
+    syncLockFromWorld();
+  });
+
+  system.run(() => {
+    syncLockFromWorld();
+  });
 
   world.afterEvents.playerSpawn.subscribe((event) => {
     if (!event.initialSpawn || !isGameOverActive()) {
