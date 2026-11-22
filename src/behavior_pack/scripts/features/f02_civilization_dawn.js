@@ -36,8 +36,45 @@ const PROTECTED_SLOTS = [
   EquipmentSlot.Offhand
 ];
 
+const EXEMPT_ID_PREFIXES = [];
+const EXEMPT_ID_SUFFIXES = [];
+
 const lastNotifyTickByPlayer = new Map();
 const disarmingPlayers = new Set();
+
+/**
+ * 他アドオン製アイテム（"minecraft:" 以外の名前空間）または除外パターンに一致するか判定する。
+ * @param {import("@minecraft/server").ItemStack | string | undefined} itemStackOrTypeId
+ * @returns {boolean}
+ */
+function isExemptItem(itemStackOrTypeId) {
+  if (!itemStackOrTypeId) {
+    return false;
+  }
+  const rawTypeId =
+    typeof itemStackOrTypeId === "string" ? itemStackOrTypeId : itemStackOrTypeId.typeId;
+  if (typeof rawTypeId !== "string" || rawTypeId.length === 0) {
+    return false;
+  }
+  const lower = rawTypeId.toLowerCase();
+  if (lower.includes(":") && !lower.startsWith("minecraft:")) {
+    return true;
+  }
+  const shortId = stripMinecraftNamespace(lower);
+  for (const prefix of EXEMPT_ID_PREFIXES) {
+    const p = prefix.toLowerCase();
+    if (lower.startsWith(p) || shortId.startsWith(p)) {
+      return true;
+    }
+  }
+  for (const suffix of EXEMPT_ID_SUFFIXES) {
+    const s = suffix.toLowerCase();
+    if (lower.endsWith(s) || shortId.endsWith(s)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function isEnabled() {
   return getBooleanProp(ENABLED_KEY, false);
@@ -108,6 +145,14 @@ function evaluateGroupAccess(groupId, currentDay, daysMap) {
  * @param {Record<string, number>} daysMap
  */
 function evaluateItemAccess(itemStackOrTypeId, currentDay, daysMap) {
+  if (isExemptItem(itemStackOrTypeId)) {
+    return {
+      allowed: true,
+      groupId: undefined,
+      groupName: undefined,
+      unlockDay: 0
+    };
+  }
   const groupIds = classifyItemGroups(itemStackOrTypeId);
   if (groupIds.length === 0) {
     return {
@@ -792,9 +837,13 @@ function init() {
     }
 
     // ベッド就寝・リスポーン設定の制限
-    if (shortBlockId === "bed" || shortBlockId.endsWith("_bed")) {
+    if (
+      blockId.toLowerCase().startsWith("minecraft:") &&
+      (shortBlockId === "bed" || shortBlockId.endsWith("_bed"))
+    ) {
       if (!isSneaking || !itemStack) {
-        const bedAccess = evaluateGroupAccess("stone_bed", currentDay, daysMap);
+        const bedGroupId = shortBlockId === "straw_bed" ? "coal" : "stone_bed";
+        const bedAccess = evaluateGroupAccess(bedGroupId, currentDay, daysMap);
         if (!bedAccess.allowed) {
           event.cancel = true;
           scheduleBlockedNotification(player, bedAccess, currentDay);

@@ -4,7 +4,7 @@
     "name": "pack.name",
     "description": "pack.description",
     "uuid": "6b55ebe0-d1f3-4e0c-a112-504e1ad44f1b",
-    "version": [1, 0, 3],
+    "version": [1, 0, 4],
     "min_engine_version": [1, 26, 60]
   },
   "modules": [
@@ -12,14 +12,14 @@
       "description": "Behavior Pack Data",
       "type": "data",
       "uuid": "727cee1b-a7e8-4f2b-8ad1-17b5172415f7",
-      "version": [1, 0, 3]
+      "version": [1, 0, 4]
     },
     {
       "description": "Noyakki Only Script Module",
       "language": "javascript",
       "type": "script",
       "uuid": "a079a1ff-f2e4-4642-b585-33e738fd9e7d",
-      "version": [1, 0, 3],
+      "version": [1, 0, 4],
       "entry": "scripts/main.js"
     }
   ],

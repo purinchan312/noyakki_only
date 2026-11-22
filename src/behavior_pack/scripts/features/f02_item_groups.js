@@ -2,20 +2,25 @@ export const ITEM_GROUPS = [
   { id: "wood", name: "原木関連", defaultDay: 0 },
   { id: "food", name: "食料関連", defaultDay: 0 },
   { id: "dirt", name: "土・地形関連", defaultDay: 0 },
+  { id: "bone_dye", name: "骨・額縁・花・染料関連", defaultDay: 2 },
   { id: "coal", name: "石炭・松明関連", defaultDay: 2 },
-  { id: "stone_bed", name: "ベッド・石・かまど関連", defaultDay: 5 },
-  { id: "leather", name: "革関連", defaultDay: 5 },
-  { id: "string", name: "糸・羊毛関連", defaultDay: 5 },
-  { id: "glass", name: "ガラス・水ビン関連", defaultDay: 7 },
-  { id: "copper", name: "銅関連", defaultDay: 10 },
-  { id: "hunting", name: "狩猟・釣具関連", defaultDay: 10 },
+  { id: "stone_bed", name: "ベッド・石・かまど関連", defaultDay: 3 },
+  { id: "leather", name: "革関連", defaultDay: 4 },
+  { id: "string", name: "糸・羊毛関連", defaultDay: 4 },
+  { id: "glass", name: "ガラス・水ビン関連", defaultDay: 5 },
+  { id: "copper", name: "銅関連", defaultDay: 6 },
+  { id: "hunting", name: "狩猟・釣具関連", defaultDay: 7 },
+  { id: "gold", name: "金関連", defaultDay: 10 },
   { id: "iron", name: "鉄・バケツ関連", defaultDay: 15 },
-  { id: "gold", name: "金関連", defaultDay: 15 },
+  { id: "redstone", name: "レッドストーン関連", defaultDay: 15 },
   { id: "diamond", name: "ダイヤ関連", defaultDay: 20 },
-  { id: "potion", name: "ポーション関連", defaultDay: 20 },
-  { id: "obsidian", name: "黒曜石関連", defaultDay: 30 },
-  { id: "nether_portal", name: "ネザーポータル着火", defaultDay: 30 },
-  { id: "end_portal", name: "エンドポータル関連", defaultDay: 40 }
+  { id: "obsidian", name: "黒曜石関連", defaultDay: 25 },
+  { id: "nether_portal", name: "ネザーポータル着火", defaultDay: 25 },
+  { id: "special_weapons", name: "トライデント・メイス関連", defaultDay: 25 },
+  { id: "potion", name: "ポーション関連", defaultDay: 30 },
+  { id: "end_portal", name: "エンドポータル関連", defaultDay: 40 },
+  { id: "elytra", name: "エリトラ・花火関連", defaultDay: 45 },
+  { id: "netherite", name: "ネザライト関連", defaultDay: 100 }
 ];
 
 export const GROUP_BY_ID = new Map(ITEM_GROUPS.map((group) => [group.id, group]));
@@ -50,8 +55,11 @@ const OVERWORLD_WOOD_SPECIES = [
   "dark_oak",
   "mangrove",
   "cherry",
-  "pale_oak"
+  "pale_oak",
+  "poplar"
 ];
+
+const NETHER_WOOD_SPECIES = ["crimson", "warped"];
 
 const WOOD_IDS = new Set([
   "stick",
@@ -61,12 +69,32 @@ const WOOD_IDS = new Set([
   "wooden_pickaxe",
   "wooden_shovel",
   "wooden_hoe",
+  "wooden_spear",
   "chest",
   "trapped_chest",
   "barrel",
   "bowl",
   "ladder",
+  "shelf",
   "mangrove_roots",
+  // Leaves and leaf litter
+  "red_poplar_leaves",
+  "orange_poplar_leaves",
+  "yellow_poplar_leaves",
+  "azalea_leaves",
+  "azalea_leaves_flowered",
+  "flowering_azalea_leaves",
+  "leaves",
+  "leaves2",
+  "leaf_litter",
+  // Nether wood extras
+  "nether_sprouts",
+  "nether_wart_block",
+  "warped_wart_block",
+  "weeping_vines",
+  "twisting_vines",
+  "vine",
+  "shroomlight",
   // Bamboo wood family
   "bamboo",
   "bamboo_sapling",
@@ -90,6 +118,7 @@ const WOOD_IDS = new Set([
   "bamboo_standing_sign",
   "bamboo_wall_sign",
   "bamboo_hanging_sign",
+  "bamboo_shelf",
   "bamboo_raft",
   "bamboo_chest_raft",
   // Legacy / unprefixed Bedrock wood IDs
@@ -121,6 +150,7 @@ for (const species of OVERWORLD_WOOD_SPECIES) {
   WOOD_IDS.add(`${species}_stairs`);
   WOOD_IDS.add(`${species}_slab`);
   WOOD_IDS.add(`${species}_double_slab`);
+  WOOD_IDS.add(`double_${species}_slab`);
   WOOD_IDS.add(`${species}_fence`);
   WOOD_IDS.add(`${species}_fence_gate`);
   WOOD_IDS.add(`${species}_door`);
@@ -131,8 +161,35 @@ for (const species of OVERWORLD_WOOD_SPECIES) {
   WOOD_IDS.add(`${species}_standing_sign`);
   WOOD_IDS.add(`${species}_wall_sign`);
   WOOD_IDS.add(`${species}_hanging_sign`);
+  WOOD_IDS.add(`${species}_shelf`);
+  WOOD_IDS.add(`${species}_leaves`);
   WOOD_IDS.add(`${species}_boat`);
   WOOD_IDS.add(`${species}_chest_boat`);
+}
+
+for (const species of NETHER_WOOD_SPECIES) {
+  WOOD_IDS.add(`${species}_stem`);
+  WOOD_IDS.add(`stripped_${species}_stem`);
+  WOOD_IDS.add(`${species}_hyphae`);
+  WOOD_IDS.add(`stripped_${species}_hyphae`);
+  WOOD_IDS.add(`${species}_planks`);
+  WOOD_IDS.add(`${species}_stairs`);
+  WOOD_IDS.add(`${species}_slab`);
+  WOOD_IDS.add(`${species}_double_slab`);
+  WOOD_IDS.add(`double_${species}_slab`);
+  WOOD_IDS.add(`${species}_fence`);
+  WOOD_IDS.add(`${species}_fence_gate`);
+  WOOD_IDS.add(`${species}_door`);
+  WOOD_IDS.add(`${species}_trapdoor`);
+  WOOD_IDS.add(`${species}_button`);
+  WOOD_IDS.add(`${species}_pressure_plate`);
+  WOOD_IDS.add(`${species}_sign`);
+  WOOD_IDS.add(`${species}_standing_sign`);
+  WOOD_IDS.add(`${species}_wall_sign`);
+  WOOD_IDS.add(`${species}_hanging_sign`);
+  WOOD_IDS.add(`${species}_shelf`);
+  WOOD_IDS.add(`${species}_fungus`);
+  WOOD_IDS.add(`${species}_roots`);
 }
 
 const FOOD_EXCLUDED_IDS = new Set([
@@ -192,6 +249,7 @@ const FOOD_IDS = new Set([
   // Seeds, crops, saplings
   "wheat_seeds",
   "wheat",
+  "hay_block",
   "pumpkin_seeds",
   "melon_seeds",
   "beetroot_seeds",
@@ -220,6 +278,7 @@ const FOOD_IDS = new Set([
   "dark_oak_sapling",
   "cherry_sapling",
   "pale_oak_sapling",
+  "poplar_sapling",
   "mangrove_propagule",
   "azalea",
   "flowering_azalea"
@@ -248,6 +307,62 @@ const DIRT_IDS = new Set([
   "clay_ball"
 ]);
 
+const BONE_DYE_IDS = new Set([
+  // Bone
+  "bone",
+  "bone_meal",
+  "bone_block",
+  // Frames and painting
+  "item_frame",
+  "frame",
+  "glow_item_frame",
+  "glow_frame",
+  "painting",
+  // Dye materials (excluding cocoa_beans which stays in food at day 0)
+  "dye",
+  "ink_sac",
+  "glow_ink_sac",
+  "lapis_lazuli",
+  // Flowers, bushes and pot
+  "dandelion",
+  "yellow_flower",
+  "poppy",
+  "blue_orchid",
+  "allium",
+  "azure_bluet",
+  "red_tulip",
+  "orange_tulip",
+  "white_tulip",
+  "pink_tulip",
+  "oxeye_daisy",
+  "cornflower",
+  "lily_of_the_valley",
+  "wither_rose",
+  "red_flower",
+  "torchflower",
+  "pitcher_plant",
+  "sunflower",
+  "lilac",
+  "rose_bush",
+  "peony",
+  "double_plant",
+  "pink_petals",
+  "wildflowers",
+  "cactus_flower",
+  "open_eyeblossom",
+  "closed_eyeblossom",
+  "spore_blossom",
+  "chorus_flower",
+  "red_shrub",
+  "bush",
+  "firefly_bush",
+  "flower_pot"
+]);
+
+for (const color of DYE_COLORS) {
+  BONE_DYE_IDS.add(`${color}_dye`);
+}
+
 const COAL_IDS = new Set([
   "coal",
   "charcoal",
@@ -259,7 +374,8 @@ const COAL_IDS = new Set([
   "campfire",
   "soul_campfire",
   "colored_torch_rg",
-  "colored_torch_bp"
+  "colored_torch_bp",
+  "straw_bed"
 ]);
 
 const STONE_BED_IDS = new Set([
@@ -278,8 +394,15 @@ const STONE_BED_IDS = new Set([
   "stone_pickaxe",
   "stone_shovel",
   "stone_hoe",
+  "stone_spear",
   "stone_button",
   "stone_pressure_plate",
+  // Terracotta and concrete base IDs
+  "terracotta",
+  "hardened_clay",
+  "stained_hardened_clay",
+  "concrete",
+  "concrete_powder",
   // Stone, cobblestone, bricks, and legacy stone slabs/stairs/walls
   "stone",
   "cobblestone",
@@ -324,6 +447,14 @@ const STONE_BED_IDS = new Set([
 
 for (const color of DYE_COLORS) {
   STONE_BED_IDS.add(`${color}_bed`);
+  STONE_BED_IDS.add(`${color}_terracotta`);
+  STONE_BED_IDS.add(`${color}_glazed_terracotta`);
+  STONE_BED_IDS.add(`${color}_concrete`);
+  STONE_BED_IDS.add(`${color}_concrete_powder`);
+  STONE_BED_IDS.add(`${color}_concrete_stairs`);
+  STONE_BED_IDS.add(`${color}_concrete_slab`);
+  STONE_BED_IDS.add(`${color}_concrete_double_slab`);
+  STONE_BED_IDS.add(`double_${color}_concrete_slab`);
 }
 
 const STONE_VARIANT_PREFIXES = [
@@ -374,6 +505,11 @@ const LEATHER_IDS = new Set([
   "leather_leggings",
   "leather_boots",
   "leather_horse_armor",
+  "copper_nautilus_armor",
+  "iron_nautilus_armor",
+  "golden_nautilus_armor",
+  "gold_nautilus_armor",
+  "diamond_nautilus_armor",
   "bundle"
 ]);
 
@@ -386,6 +522,7 @@ const STRING_IDS = new Set([
   "tripwire",
   "wool",
   "carpet",
+  "cushion",
   "moss_carpet",
   "pale_moss_carpet",
   "lead",
@@ -395,6 +532,11 @@ const STRING_IDS = new Set([
 for (const color of DYE_COLORS) {
   STRING_IDS.add(`${color}_wool`);
   STRING_IDS.add(`${color}_carpet`);
+  STRING_IDS.add(`${color}_wool_stairs`);
+  STRING_IDS.add(`${color}_wool_slab`);
+  STRING_IDS.add(`${color}_wool_double_slab`);
+  STRING_IDS.add(`double_${color}_wool_slab`);
+  STRING_IDS.add(`${color}_cushion`);
 }
 
 const GLASS_IDS = new Set([
@@ -424,6 +566,7 @@ const COPPER_IDS = new Set([
   "copper_pickaxe",
   "copper_shovel",
   "copper_hoe",
+  "copper_spear",
   "copper_helmet",
   "copper_chestplate",
   "copper_leggings",
@@ -480,6 +623,7 @@ const IRON_IDS = new Set([
   "iron_pickaxe",
   "iron_shovel",
   "iron_hoe",
+  "iron_spear",
   "iron_helmet",
   "iron_chestplate",
   "iron_leggings",
@@ -533,6 +677,48 @@ const IRON_IDS = new Set([
   "compass"
 ]);
 
+const REDSTONE_IDS = new Set([
+  "redstone",
+  "redstone_wire",
+  "redstone_block",
+  "redstone_torch",
+  "unlit_redstone_torch",
+  "repeater",
+  "unpowered_repeater",
+  "powered_repeater",
+  "comparator",
+  "unpowered_comparator",
+  "powered_comparator",
+  "piston",
+  "sticky_piston",
+  "piston_arm_collision",
+  "sticky_piston_arm_collision",
+  "observer",
+  "dispenser",
+  "dropper",
+  "crafter",
+  "target",
+  "lever",
+  "daylight_detector",
+  "daylight_detector_inverted",
+  "redstone_lamp",
+  "lit_redstone_lamp",
+  "noteblock",
+  "note_block",
+  "tripwire_hook",
+  "heavy_weighted_pressure_plate",
+  "lectern",
+  "sculk_sensor",
+  "calibrated_sculk_sensor",
+  "sculk_shrieker",
+  "sculk_catalyst",
+  "tnt",
+  "slime_ball",
+  "slime",
+  "slime_block",
+  "honey_block"
+]);
+
 const GOLD_IDS = new Set([
   "raw_gold",
   "raw_gold_block",
@@ -544,6 +730,7 @@ const GOLD_IDS = new Set([
   "golden_pickaxe",
   "golden_shovel",
   "golden_hoe",
+  "golden_spear",
   "golden_helmet",
   "golden_chestplate",
   "golden_leggings",
@@ -567,12 +754,21 @@ const DIAMOND_IDS = new Set([
   "diamond_pickaxe",
   "diamond_shovel",
   "diamond_hoe",
+  "diamond_spear",
   "diamond_helmet",
   "diamond_chestplate",
   "diamond_leggings",
   "diamond_boots",
   "diamond_horse_armor",
   "jukebox"
+]);
+
+const SPECIAL_WEAPONS_IDS = new Set([
+  "trident",
+  "mace",
+  "heavy_core",
+  "breeze_rod",
+  "wind_charge"
 ]);
 
 const POTION_IDS = new Set([
@@ -594,6 +790,35 @@ const END_PORTAL_IDS = new Set([
   "ender_eye",
   "blaze_rod",
   "blaze_powder"
+]);
+
+const ELYTRA_IDS = new Set([
+  "elytra",
+  "firework_rocket",
+  "fireworks",
+  "firework_star",
+  "fireworks_charge",
+  "phantom_membrane"
+]);
+
+const NETHERITE_IDS = new Set([
+  "ancient_debris",
+  "netherite_scrap",
+  "netherite_ingot",
+  "netherite_block",
+  "netherite_upgrade_smithing_template",
+  "netherite_sword",
+  "netherite_axe",
+  "netherite_pickaxe",
+  "netherite_shovel",
+  "netherite_hoe",
+  "netherite_spear",
+  "netherite_helmet",
+  "netherite_chestplate",
+  "netherite_leggings",
+  "netherite_boots",
+  "netherite_horse_armor",
+  "netherite_nautilus_armor"
 ]);
 
 // 設備UI・コンテナを開くだけの操作をブロックしない対象ブロック集合
@@ -628,8 +853,16 @@ export const WORKSTATION_UI_BLOCKS = new Set([
   "minecraft:dispenser",
   "minecraft:beacon",
   "minecraft:crafter",
-  "minecraft:lectern"
+  "minecraft:lectern",
+  "minecraft:shelf",
+  "minecraft:bamboo_shelf",
+  "minecraft:crimson_shelf",
+  "minecraft:warped_shelf"
 ]);
+
+for (const species of OVERWORLD_WOOD_SPECIES) {
+  WORKSTATION_UI_BLOCKS.add(`minecraft:${species}_shelf`);
+}
 
 for (const wax of COPPER_WAX_STAGES) {
   for (const ox of COPPER_OXIDATION_STAGES) {
@@ -782,6 +1015,11 @@ export function classifyItemGroups(itemStackOrTypeId) {
   const isStringInput = typeof itemStackOrTypeId === "string";
   const rawTypeId = isStringInput ? itemStackOrTypeId : itemStackOrTypeId.typeId;
   const itemStack = isStringInput ? undefined : itemStackOrTypeId;
+
+  if (typeof rawTypeId === "string" && rawTypeId.includes(":") && !rawTypeId.toLowerCase().startsWith("minecraft:")) {
+    return [];
+  }
+
   const shortId = stripMinecraftNamespace(rawTypeId);
 
   if (!shortId) {
@@ -812,6 +1050,7 @@ export function classifyItemGroups(itemStackOrTypeId) {
   }
 
   if (DIRT_IDS.has(shortId)) matched.push("dirt");
+  if (BONE_DYE_IDS.has(shortId)) matched.push("bone_dye");
   if (COAL_IDS.has(shortId)) matched.push("coal");
   if (STONE_BED_IDS.has(shortId)) matched.push("stone_bed");
   if (LEATHER_IDS.has(shortId)) matched.push("leather");
@@ -822,11 +1061,15 @@ export function classifyItemGroups(itemStackOrTypeId) {
   if (IRON_IDS.has(shortId) || shortId.endsWith("_bucket")) {
     if (!matched.includes("iron")) matched.push("iron");
   }
+  if (REDSTONE_IDS.has(shortId)) matched.push("redstone");
   if (GOLD_IDS.has(shortId)) matched.push("gold");
   if (DIAMOND_IDS.has(shortId)) matched.push("diamond");
+  if (SPECIAL_WEAPONS_IDS.has(shortId)) matched.push("special_weapons");
   if (POTION_IDS.has(shortId)) matched.push("potion");
   if (OBSIDIAN_IDS.has(shortId)) matched.push("obsidian");
   if (END_PORTAL_IDS.has(shortId)) matched.push("end_portal");
+  if (ELYTRA_IDS.has(shortId)) matched.push("elytra");
+  if (NETHERITE_IDS.has(shortId)) matched.push("netherite");
 
   return matched;
 }
